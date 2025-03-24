@@ -20,30 +20,67 @@ jobs:
         run: |
           sudo npm install -g sfdx-cli
           sfdx --version
+          sfdx plugins --core
+
+      - name: Debug - Show environment variables
+        run: |
+          echo "SF_CLIENT_ID: ${#SF_CLIENT_ID} chars" # Shows length without revealing value
+          echo "SF_USERNAME: $SF_USERNAME"
+          echo "SF_LOGIN_URL: $SF_LOGIN_URL"
+          echo "SF_JWT_KEY length: ${#SF_JWT_KEY} chars"
 
       - name: Authenticate with JWT
         env:
-          SF_JWT_KEY: ${{ secrets.SF_JWT_KEY }}  # Base64 encoded server.key
+          SF_JWT_KEY: ${{ secrets.SF_JWT_KEY }}
           SF_CLIENT_ID: ${{ secrets.SF_CLIENT_ID }}
           SF_USERNAME: ${{ secrets.SF_USERNAME }}
           SF_LOGIN_URL: ${{ secrets.SF_LOGIN_URL }}
         run: |
-          # Decode the Base64 key and save to temporary file
+          # Debug - Verify key file can be decoded
+          echo "Attempting to decode JWT key..."
           echo "$SF_JWT_KEY" | base64 --decode > server.key
+          echo "Key file created with size: $(wc -c < server.key) bytes"
           
-          # Authenticate using JWT
-          sfdx force:auth:jwt:grant \
+          # Debug - Verify key file contents (first/last 10 chars)
+          echo "Key starts with: $(head -c 10 server.key)"
+          echo "Key ends with: $(tail -c 10 server.key)"
+          
+          # Debug - Verify certificate format
+          if grep -q "BEGIN PRIVATE KEY" server.key; then
+            echo "Key appears to be in correct PEM format"
+          else
+            echo "WARNING: Key doesn't appear to be in PEM format"
+          fi
+          
+          # Debug - Show full auth command that will be executed
+          echo "Will execute:"
+          echo "sfdx force:auth:jwt:grant \"
+          echo "  --clientid $SF_CLIENT_ID \"
+          echo "  --jwtkeyfile server.key \"
+          echo "  --username $SF_USERNAME \"
+          echo "  --instanceurl $SF_LOGIN_URL \"
+          echo "  --setalias deploy-org"
+          
+          # Run authentication with increased verbosity
+          SFDX_DEBUG=1 sfdx force:auth:jwt:grant \
             --clientid $SF_CLIENT_ID \
             --jwtkeyfile server.key \
             --username $SF_USERNAME \
             --instanceurl $SF_LOGIN_URL \
-            --setalias deploy-org
+            --setalias deploy-org \
+            --json \
+            --loglevel trace 2> auth_errors.log || true
+          
+          # Debug - Output auth results
+          echo "Auth command completed. Showing debug info:"
+          cat auth_errors.log || echo "No error log generated"
+          
+          # Verify authentication
+          echo "Listing authenticated orgs:"
+          sfdx force:org:list --all --verbose
           
           # Remove the temporary key file
-          rm -f server.key
-          
-          # List authenticated orgs for verification
-          sfdx force:org:list
+          rm -f server.key auth_errors.log
 
       - name: Run All Test Classes
         run: |
@@ -52,11 +89,11 @@ jobs:
             --resultformat human \
             --outputdir test-results \
             --wait 30 \
-            --targetusername deploy-org  # Using the org alias
+            --targetusername deploy-org
 
       - name: Deploy to Salesforce
         run: |
           sfdx force:source:deploy \
             --sourcepath force-app \
             --targetusername deploy-org \
-            --checkonly  # Remove this for actual deployments
+            --checkonly
