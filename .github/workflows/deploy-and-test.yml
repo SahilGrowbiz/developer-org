@@ -1,0 +1,40 @@
+name: Deploy and Run Tests
+
+on:
+  push:
+    branches:
+      - main  # Trigger on PR merge to main
+  pull_request:
+    branches:
+      - main  # Trigger on PR creation targeting main
+
+jobs:
+  deploy-and-test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Set up Salesforce CLI
+        run: |
+          sudo npm install -g sfdx-cli
+          sfdx --version
+
+      - name: Authenticate Salesforce Org
+        env:
+          SF_USERNAME: ${{ secrets.SF_USERNAME }}
+          SF_PASSWORD: ${{ secrets.SF_PASSWORD }}
+          SF_LOGIN_URL: ${{ secrets.SF_LOGIN_URL }}
+          SF_CLIENT_ID: ${{ secrets.SF_CLIENT_ID }}
+          SF_CLIENT_SECRET: ${{ secrets.SF_CLIENT_SECRET }}
+        run: |
+          sfdx auth:jwt:grant --clientid $SF_CLIENT_ID --jwtkeyfile certs/server.key --username $SF_USERNAME --instanceurl $SF_LOGIN_URL
+
+      - name: Run All Test Classes
+        run: |
+          sfdx force:apex:test:run --codecoverage --resultformat human --outputdir test-results --wait 10 --targetusername $SF_USERNAME
+
+      - name: Deploy to Salesforce
+        run: |
+          sfdx force:source:deploy -p force-app -u $SF_USERNAME
