@@ -1,4 +1,4 @@
-name: Deploy and Run Tests 
+name: Deploy and Run Tests
 
 on:
   push:
@@ -21,35 +21,42 @@ jobs:
           sudo npm install -g sfdx-cli
           sfdx --version
 
-      - name: Authenticate Salesforce Org
+      - name: Authenticate with JWT
         env:
-          SF_USERNAME: ${{ secrets.SF_USERNAME }}
-          SF_PASSWORD: ${{ secrets.SF_PASSWORD }}
-          SF_LOGIN_URL: ${{ secrets.SF_LOGIN_URL }}
+          SF_JWT_KEY: ${{ secrets.SF_JWT_KEY }}  # Base64 encoded server.key
           SF_CLIENT_ID: ${{ secrets.SF_CLIENT_ID }}
-          SF_CLIENT_SECRET: ${{ secrets.SF_CLIENT_SECRET }}
+          SF_USERNAME: ${{ secrets.SF_USERNAME }}
+          SF_LOGIN_URL: ${{ secrets.SF_LOGIN_URL }}
         run: |
-          sfdx auth:jwt:grant \
+          # Decode the Base64 key and save to temporary file
+          echo "$SF_JWT_KEY" | base64 --decode > server.key
+          
+          # Authenticate using JWT
+          sfdx force:auth:jwt:grant \
             --clientid $SF_CLIENT_ID \
-            --jwtkeyfile certs/server.key \
+            --jwtkeyfile server.key \
             --username $SF_USERNAME \
-            --instanceurl $SF_LOGIN_URL
+            --instanceurl $SF_LOGIN_URL \
+            --setalias deploy-org
+          
+          # Remove the temporary key file
+          rm -f server.key
+          
+          # List authenticated orgs for verification
+          sfdx force:org:list
 
       - name: Run All Test Classes
-        env:
-          SF_USERNAME: ${{ secrets.SF_USERNAME }}
         run: |
           sfdx force:apex:test:run \
             --codecoverage \
             --resultformat human \
             --outputdir test-results \
-            --wait 10 \
-            --targetusername $SF_USERNAME
+            --wait 30 \
+            --targetusername deploy-org  # Using the org alias
 
       - name: Deploy to Salesforce
-        env:
-          SF_USERNAME: ${{ secrets.SF_USERNAME }}
         run: |
           sfdx force:source:deploy \
             --sourcepath force-app \
-            --targetusername $SF_USERNAME
+            --targetusername deploy-org \
+            --checkonly  # Remove this for actual deployments
