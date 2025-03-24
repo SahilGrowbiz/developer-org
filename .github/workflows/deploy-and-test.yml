@@ -3,10 +3,10 @@ name: Deploy and Run Tests
 on:
   push:
     branches:
-      - main  # Trigger on PR merge to main
+      - main
   pull_request:
     branches:
-      - main  # Trigger on PR creation targeting main
+      - main
 
 jobs:
   deploy-and-test:
@@ -29,12 +29,27 @@ jobs:
           SF_CLIENT_ID: ${{ secrets.SF_CLIENT_ID }}
           SF_CLIENT_SECRET: ${{ secrets.SF_CLIENT_SECRET }}
         run: |
-          sfdx auth:jwt:grant --clientid $SF_CLIENT_ID --jwtkeyfile certs/server.key --username $SF_USERNAME --instanceurl $SF_LOGIN_URL
+          sfdx auth:jwt:grant \
+            --clientid $SF_CLIENT_ID \
+            --jwtkeyfile certs/server.key \
+            --username $SF_USERNAME \
+            --instanceurl $SF_LOGIN_URL
 
       - name: Run All Test Classes
+        env:
+          SF_USERNAME: ${{ secrets.SF_USERNAME }}
         run: |
-          sfdx force:apex:test:run --codecoverage --resultformat human --outputdir test-results --wait 10 --targetusername $SF_USERNAME
+          sfdx force:apex:test:run \
+            --codecoverage \
+            --resultformat human \
+            --outputdir test-results \
+            --wait 10 \
+            --targetusername $SF_USERNAME
 
       - name: Deploy to Salesforce
+        env:
+          SF_USERNAME: ${{ secrets.SF_USERNAME }}
         run: |
-          sfdx force:source:deploy -p force-app -u $SF_USERNAME
+          sfdx force:source:deploy \
+            --sourcepath force-app \
+            --targetusername $SF_USERNAME
