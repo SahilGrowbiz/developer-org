@@ -1,4 +1,4 @@
-name: Deploy and Run Tests 
+name: Deploy to org environment on push to main
 
 on:
   push:
@@ -9,73 +9,34 @@ on:
       - main
 
 jobs:
-  deploy-and-test:
-    runs-on: ubuntu-latest
+  Deploy-to-org-environment:
+      runs-on: ubuntu-latest
+      environment: orgfarm-8bf35803e5-dev-ed
+      steps:
+          - uses: actions/setup-node@v3
+            with:
+              node-version: '18'
+          - name: 'Checkout source code'
+            uses: actions/checkout@v3
+            with:
+              fetch-depth: '2'
+                
+          # Now Install Salesforce CLI
+          - name: 'Install sfdx'
+            run: npm install @salesforce/cli --global
+          - name: 'Installing sfdx git delta'
+            run: | 
+                echo Y | sfdx plugins:install sfdx-git-delta
+                sfdx plugins
 
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v3
-
-      - name: Set up Salesforce CLI
-        run: |
-          sudo npm install -g sfdx-cli
-          sfdx --version
-          sfdx plugins --core
-
-      - name: Debug - Verify secrets are available
-        run: |
-          echo "SF_CLIENT_ID length: ${#SF_CLIENT_ID} chars"
-          echo "SF_USERNAME: $SF_USERNAME"
-          echo "SF_LOGIN_URL: $SF_LOGIN_URL"
-          echo "SF_JWT_KEY length: ${#SF_JWT_KEY} chars"
-        env:
-          SF_CLIENT_ID: ${{ secrets.SF_CLIENT_ID }}
-          SF_USERNAME: ${{ secrets.SF_USERNAME }}
-          SF_LOGIN_URL: ${{ secrets.SF_LOGIN_URL }}
-          SF_JWT_KEY: ${{ secrets.SF_JWT_KEY }}
-
-      - name: Authenticate with JWT
-        env:
-          SF_JWT_KEY: ${{ secrets.SF_JWT_KEY }}
-          SF_CLIENT_ID: ${{ secrets.SF_CLIENT_ID }}
-          SF_USERNAME: ${{ secrets.SF_USERNAME }}
-          SF_LOGIN_URL: ${{ secrets.SF_LOGIN_URL }}
-        run: |
-          # Create key file
-          echo "$SF_JWT_KEY" | base64 --decode > server.key
-          chmod 600 server.key
-          
-          # Debug key file
-          echo "JWT Key file info:"
-          ls -l server.key
-          head -n 1 server.key
-          tail -n 1 server.key
-          
-          # Execute auth command (single line, no echo)
-          SFDX_DEBUG=1 sfdx force:auth:jwt:grant \
-            --clientid "$SF_CLIENT_ID" \
-            --jwtkeyfile server.key \
-            --username "$SF_USERNAME" \
-            --instanceurl "$SF_LOGIN_URL" \
-            --setalias deploy-org \
-            --json \
-            --loglevel trace
-          
-          # Verify authentication
-          sfdx force:org:list --all
-
-      - name: Run All Test Classes
-        run: |
-          sfdx force:apex:test:run \
-            --codecoverage \
-            --resultformat human \
-            --outputdir test-results \
-            --wait 30 \
-            --targetusername deploy-org
-
-      - name: Deploy to Salesforce
-        run: |
-          sfdx force:source:deploy \
-            --sourcepath force-app \
-            --targetusername deploy-org \
-            --checkonly
+          - name: 'Create delta packages'
+            run: | 
+                mkdir changed-sources
+                sf sgd source delta --to "HEAD" --from "HEAD~1" --output changed-sources/ --generate-delta --source force-app/
+                echo "[INFO] Diff generated"
+                
+          - name: 'Deploy to environment with running all local tests'
+            run: |
+                echo "${{ secrets.JWT_SERVER_KEY }}" > server.key
+                sf org login jwt --username ${{ secrets.DEPLOYMENT_USER_NAME }} --jwt-key-file server.key --client-id ${{ secrets.CONSUMER_KEY }} --instance-url ${{ vars.INSTANCE_URL }} --set-default
+                sf project deploy start --source-dir changed-sources/force-app --test-level RunLocalTests
