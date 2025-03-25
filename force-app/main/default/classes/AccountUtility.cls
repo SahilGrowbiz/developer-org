@@ -1,19 +1,19 @@
 /**
  * @description       : 
- * @author            : Sahil Saini
+ * @author            : Sahil Saini S
  * @group             : 
  * @last modified on  : 03-25-2025
  * @last modified by  : Sahil
 **/
 public class AccountUtility {
     /**
-     * Retrieves all Account names in Salesforce
-     * @return List<String> containing all Account names
+     * Retrieves all Account names in Salesforce 
+     * @return List<String> containing all Account names  dsffs
      */
     public static List<String> getAllAccountNames() {
         List<String> accountNames = new List<String>();
         
-        // Query all Accounts (consider using a LIMIT in production)
+        // Query all Accounts (consider using a LIMIT in production) jgjhjhsx
         List<Account> accounts = [SELECT Id , Name FROM Account ORDER BY Name];
         
         // Extract names and add to list
