@@ -1,3 +1,10 @@
+/**
+ * @description       : 
+ * @author            : Sahil
+ * @group             : 
+ * @last modified on  : 03-25-2025
+ * @last modified by  : Sahil
+**/
 public class AccountUtility {
     /**
      * Retrieves all Account names in Salesforce
@@ -7,7 +14,7 @@ public class AccountUtility {
         List<String> accountNames = new List<String>();
         
         // Query all Accounts (consider using a LIMIT in production)
-        List<Account> accounts = [SELECT Name FROM Account ORDER BY Name];
+        List<Account> accounts = [SELECT Id , Name FROM Account ORDER BY Name];
         
         // Extract names and add to list
         for (Account acc : accounts) {
